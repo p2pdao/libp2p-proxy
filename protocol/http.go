@@ -9,11 +9,10 @@ import (
 	"time"
 )
 
-func HttpHandler(bs *BufStream) {
+func HttpHandler(bs *BufReaderStream) {
 	req, err := http.ReadRequest(bs.Reader)
-	log.Infof("proxying for %s", req.Host)
 	if err != nil {
-		log.Error(err)
+		Log.Error(err)
 		writeHTTPError(bs, 400, err)
 		bs.CloseWrite()
 		return
@@ -28,7 +27,7 @@ func HttpHandler(bs *BufStream) {
 
 	conn, err := net.Dial("tcp", req.Host)
 	if err != nil {
-		log.Error(err)
+		Log.Error(err)
 		writeHTTPError(bs, 500, err)
 		bs.CloseWrite()
 		return
@@ -37,8 +36,9 @@ func HttpHandler(bs *BufStream) {
 	defer conn.Close()
 	fmt.Fprintf(bs, "HTTP/1.1 200 Connection Established\r\n\r\n")
 
-	if err := tunneling(bs.Stream, conn); err != nil {
-		log.Error(err)
+	Log.Infof("http proxying: %s", req.Host)
+	if err := tunneling(bs, conn); err != nil {
+		Log.Error(err)
 	}
 }
 

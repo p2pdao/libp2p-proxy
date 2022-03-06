@@ -27,13 +27,13 @@ func (p *ProxyService) sideHandler(conn net.Conn, remotePeer peer.ID) {
 
 	s, err := p.host.NewStream(context.Background(), remotePeer, ID)
 	if err != nil {
-		log.Error(err)
+		Log.Error(err)
 		return
 	}
 
 	defer s.Close()
 
 	if err := tunneling(s, conn); err != nil {
-		log.Error(err)
+		Log.Error(err)
 	}
 }
