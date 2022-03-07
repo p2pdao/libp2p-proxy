@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"context"
 	"net"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -13,8 +12,14 @@ func (p *ProxyService) Serve(proxyAddr string, remotePeer peer.ID) error {
 		return err
 	}
 
+	go p.Wait(ln.Close)
+
 	for {
 		conn, err := ln.Accept()
+		if err := p.ctx.Err(); err != nil {
+			return err
+		}
+
 		if err != nil {
 			return err
 		}
@@ -25,7 +30,7 @@ func (p *ProxyService) Serve(proxyAddr string, remotePeer peer.ID) error {
 func (p *ProxyService) sideHandler(conn net.Conn, remotePeer peer.ID) {
 	defer conn.Close()
 
-	s, err := p.host.NewStream(context.Background(), remotePeer, ID)
+	s, err := p.host.NewStream(p.ctx, remotePeer, ID)
 	if err != nil {
 		Log.Error(err)
 		return

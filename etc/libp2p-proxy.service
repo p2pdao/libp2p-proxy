@@ -1,0 +1,10 @@
+[Unit]
+Description=libp2p-proxy
+After=network.target
+
+[Service]
+ExecStart=/opt/libp2p-proxy/libp2p-proxy.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,12 +1,5 @@
 {
   "peer_key": "CAESQBa/lNg0/GHhzjf03oYvHfDYf9VnkQImE9lPB8Zrf4JICBKHPB5PbIzQoCkWwBrkha4xgpIerre4B5zZ5J7f/W8=",
-  "network": {
-    "listen_addrs": []
-  },
-  "acl": {
-    "allow_peers": ["none"],
-    "allow_subnets": []
-  },
   "proxy": {
     "addr": "127.0.0.1:1082",
     "server_peer": "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWSPGy9bCrTRF5Nwsb3B6CQsZ9VGvEGPJ6ZT2ZWWCTXR3p"

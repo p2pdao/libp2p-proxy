@@ -18,7 +18,9 @@ type ProxyConfig struct {
 }
 
 type NetworkConfig struct {
+	EnableNAT   bool     `json:"enable_nat"`
 	ListenAddrs []string `json:"listen_addrs"`
+	Relays      []string `json:"relays"`
 }
 
 type ACLConfig struct {

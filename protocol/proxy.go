@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"context"
+
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -14,14 +16,27 @@ const (
 var Log = logging.Logger("libp2p-proxy")
 
 type ProxyService struct {
+	ctx  context.Context
 	host host.Host
 	acl  *ACLFilter
 }
 
-func NewProxyService(h host.Host, acl *ACLFilter) *ProxyService {
-	ps := &ProxyService{h, acl}
+func NewProxyService(ctx context.Context, h host.Host, acl *ACLFilter) *ProxyService {
+	ps := &ProxyService{ctx, h, acl}
 	h.SetStreamHandler(ID, ps.Handler)
 	return ps
+}
+
+func (p *ProxyService) Wait(fn func() error) error {
+	<-p.ctx.Done()
+	defer p.host.Close()
+
+	if fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+	return p.ctx.Err()
 }
 
 func (p *ProxyService) Handler(s network.Stream) {

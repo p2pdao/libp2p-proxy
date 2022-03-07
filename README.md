@@ -1,38 +1,48 @@
 # libp2p-proxy
 > HTTP proxy service with libp2p
 
-In order to proxy an HTTP request, we create a local peer which listens on `localhost:1082`. HTTP requests performed to that address are tunneled via a libp2p stream to a remote peer, which then performs the HTTP requests and sends the response back to the local peer, which relays it to the user.
+libp2p-proxy creates a http and socks5 proxy service using libp2p peers.
 
 ## Build
 
 ```
 > cd libp2p-proxy
-> go build
+> make build
+```
+## Install
+
+```
+go get github.com/p2pdao/libp2p-proxy/cmd/libp2p-proxy
 ```
 
 ## Usage
 
-First run the "remote" peer as follows. It will print a local peer address. If you would like to run this on a separate machine, please replace the IP accordingly:
-
-```sh
-> ./libp2p-proxy
-Proxy server is ready
-libp2p-peer addresses:
-/ip4/127.0.0.1/tcp/12000/p2p/QmddTrQXhA9AkCpXPTkcY7e22NK73TwkUms3a44DhTKJTD
+1. Generate peer keys for server and client:
+```
+./libp2p-proxy -key
 ```
 
-Then run the local peer, indicating that it will need to forward http requests to the remote peer as follows:
-
+2. Update [server.json](https://github.com/p2pdao/libp2p-proxy/blob/main/config/sample_server.json) with server peer key and start remote peer first with:
 ```
-> ./libp2p-proxy -d /ip4/127.0.0.1/tcp/12000/p2p/QmddTrQXhA9AkCpXPTkcY7e22NK73TwkUms3a44DhTKJTD
-Proxy server is ready
-libp2p-peer addresses:
-/ip4/127.0.0.1/tcp/12001/p2p/Qmaa2AYTha1UqcFVX97p9R1UP7vbzDLY7bqWsZw1135QvN
-proxy listening on  127.0.0.1:1082
+./libp2p-proxy -config server.json
 ```
 
-As you can see, the proxy prints the listening address `127.0.0.1:1082`. You can now use this address as a proxy, for example with `curl`:
-
+3. Then update [client.json](https://github.com/p2pdao/libp2p-proxy/blob/main/config/sample_client.json) with server peer multiaddress and start the local peer with:
 ```
-> http_proxy=127.0.0.1:11082 curl "https://ipfs.io/p2p/QmfUX75pGRBRDnjeoMkQzuQczuCup2aYbeLxz5NzeSu9G6"
+./libp2p-proxy -config client.json
+```
+
+Then you can do something like:
+```
+export http_proxy=http://127.0.0.1:1082 https_proxy=http://127.0.0.1:1082
+```
+
+or:
+```
+export http_proxy=socks5://127.0.0.1:1082 https_proxy=socks5://127.0.0.1:1082
+```
+
+then:
+```
+curl "https://github.com"
 ```
