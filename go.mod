@@ -6,6 +6,7 @@ require (
 	github.com/ipfs/go-log/v2 v2.5.0
 	github.com/libp2p/go-libp2p v0.18.0-rc6
 	github.com/libp2p/go-libp2p-core v0.14.0
+	github.com/libp2p/go-libp2p-gostream v0.3.1
 	github.com/multiformats/go-multiaddr v0.5.0
 	github.com/txthinking/socks5 v0.0.0-20220212043548-414499347d4a
 )

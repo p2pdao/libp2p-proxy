@@ -6,10 +6,12 @@ import (
 )
 
 type Config struct {
-	PeerKey string        `json:"peer_key"`
-	Network NetworkConfig `json:"network"`
-	ACL     ACLConfig     `json:"acl"`
-	Proxy   *ProxyConfig  `json:"proxy"`
+	PeerKey   string        `json:"peer_key"`
+	P2PHost   string        `json:"p2p_host"`
+	ServePath string        `json:"serve_path"`
+	Network   NetworkConfig `json:"network"`
+	ACL       ACLConfig     `json:"acl"`
+	Proxy     *ProxyConfig  `json:"proxy"`
 }
 
 type ProxyConfig struct {

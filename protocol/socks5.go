@@ -7,26 +7,78 @@ import (
 	"github.com/txthinking/socks5"
 )
 
-func Socks5Handler(bs *BufReaderStream) {
+func IsSocks5(v byte) bool {
+	return v == socks5.Ver
+}
+
+func (p *ProxyService) socks5Handler(bs *BufReaderStream) {
 	if err := socks5Negotiate(bs); err != nil {
 		Log.Error(err)
 		return
 	}
 
-	conn, err := socks5RequestConnect(bs)
-	if err != nil {
-		Log.Error(err)
-		return
-	}
-	defer conn.Close()
-
-	if err := tunneling(bs, conn); err != nil {
+	if err := p.socks5RequestConnect(bs); err != nil {
 		Log.Error(err)
 	}
 }
 
-func IsSocks5(v byte) bool {
-	return v == socks5.Ver
+func (p *ProxyService) socks5RequestConnect(bs *BufReaderStream) error {
+	r, err := socks5.NewRequestFrom(bs.Reader)
+	if err != nil {
+		return err
+	}
+
+	if r.Cmd != socks5.CmdConnect {
+		if e := replyErr(r, bs, socks5.RepCommandNotSupported); err != nil {
+			return e
+		}
+		return socks5.ErrUnsupportCmd
+	}
+
+	if p.isP2PHttp(r.Address()) {
+		a, addr, port, err := socks5.ParseAddress(r.Address())
+		if err != nil {
+			if e := replyErr(r, bs, socks5.RepHostUnreachable); err != nil {
+				return e
+			}
+			return err
+		}
+
+		reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
+		if _, err := reply.WriteTo(bs); err != nil {
+			return err
+		}
+		p.p2phttpHandler(bs, nil)
+		return nil
+	}
+
+	conn, err := net.Dial("tcp", r.Address())
+	if err != nil {
+		if e := replyErr(r, bs, socks5.RepHostUnreachable); err != nil {
+			return e
+		}
+		return err
+	}
+
+	defer conn.Close()
+	a, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
+	if err != nil {
+		if e := replyErr(r, bs, socks5.RepHostUnreachable); err != nil {
+			return e
+		}
+		return err
+	}
+
+	reply := socks5.NewReply(socks5.RepSuccess, a, addr, port)
+	if _, err := reply.WriteTo(bs); err != nil {
+		return err
+	}
+
+	Log.Infof("socks5 proxying: %s", r.Address())
+	if err := tunneling(bs, conn); err != nil {
+		Log.Error(err)
+	}
+	return tunneling(conn, bs)
 }
 
 func socks5Negotiate(bs *BufReaderStream) error {
@@ -48,51 +100,13 @@ func socks5Negotiate(bs *BufReaderStream) error {
 	return err
 }
 
-func socks5RequestConnect(rw io.ReadWriter) (net.Conn, error) {
-	r, err := socks5.NewRequestFrom(rw)
-	if err != nil {
-		return nil, err
-	}
-
-	if r.Cmd != socks5.CmdConnect {
-		if e := replyErr(r, rw, socks5.RepCommandNotSupported); err != nil {
-			return nil, e
-		}
-		return nil, socks5.ErrUnsupportCmd
-	}
-
-	conn, err := net.Dial("tcp", r.Address())
-	if err != nil {
-		if e := replyErr(r, rw, socks5.RepHostUnreachable); err != nil {
-			return nil, e
-		}
-		return nil, err
-	}
-
-	a, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
-	if err != nil {
-		if e := replyErr(r, rw, socks5.RepHostUnreachable); err != nil {
-			return nil, e
-		}
-		return nil, err
-	}
-
-	p := socks5.NewReply(socks5.RepSuccess, a, addr, port)
-	if _, err := p.WriteTo(rw); err != nil {
-		return nil, err
-	}
-
-	Log.Infof("socks5 proxying for %s", r.Address())
-	return conn, nil
-}
-
 func replyErr(req *socks5.Request, rw io.ReadWriter, rep byte) error {
-	var p *socks5.Reply
+	var reply *socks5.Reply
 	if req.Atyp == socks5.ATYPIPv4 || req.Atyp == socks5.ATYPDomain {
-		p = socks5.NewReply(rep, socks5.ATYPIPv4, []byte{0x00, 0x00, 0x00, 0x00}, []byte{0x00, 0x00})
+		reply = socks5.NewReply(rep, socks5.ATYPIPv4, []byte{0x00, 0x00, 0x00, 0x00}, []byte{0x00, 0x00})
 	} else {
-		p = socks5.NewReply(rep, socks5.ATYPIPv6, []byte(net.IPv6zero), []byte{0x00, 0x00})
+		reply = socks5.NewReply(rep, socks5.ATYPIPv6, []byte(net.IPv6zero), []byte{0x00, 0x00})
 	}
-	_, err := p.WriteTo(rw)
+	_, err := reply.WriteTo(rw)
 	return err
 }

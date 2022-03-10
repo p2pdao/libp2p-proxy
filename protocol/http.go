@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func HttpHandler(bs *BufReaderStream) {
+func (p *ProxyService) httpHandler(bs *BufReaderStream) {
 	req, err := http.ReadRequest(bs.Reader)
 	if err != nil {
 		Log.Error(err)
@@ -18,26 +18,56 @@ func HttpHandler(bs *BufReaderStream) {
 		return
 	}
 
-	if strings.ToUpper(req.Method) != "CONNECT" {
-		err = fmt.Errorf("invalid request method: %s", req.Method)
+	isConnectProxy := strings.ToUpper(req.Method) == "CONNECT"
+	if !isConnectProxy && !strings.HasPrefix(req.RequestURI, "http://") {
+		err = fmt.Errorf("invalid http proxy request: %s, %s, %s", req.Method, req.Host, req.RequestURI)
 		writeHTTPError(bs, 400, err)
 		bs.CloseWrite()
 		return
 	}
 
-	conn, err := net.Dial("tcp", req.Host)
+	if p.isP2PHttp(req.Host) {
+		if isConnectProxy {
+			fmt.Fprintf(bs, "HTTP/1.1 200 Connection Established\r\n\r\n")
+			p.p2phttpHandler(bs, nil)
+		} else {
+			p.p2phttpHandler(bs, req)
+		}
+		return
+	}
+
+	host := req.Host
+	_, port, _ := net.SplitHostPort(req.Host)
+	if port == "" {
+		host = net.JoinHostPort(req.Host, "80")
+	}
+	conn, err := net.Dial("tcp", host)
 	if err != nil {
 		Log.Error(err)
-		writeHTTPError(bs, 500, err)
+		writeHTTPError(bs, 502, err)
 		bs.CloseWrite()
 		return
 	}
 
 	defer conn.Close()
-	fmt.Fprintf(bs, "HTTP/1.1 200 Connection Established\r\n\r\n")
+	if isConnectProxy {
+		fmt.Fprintf(bs, "HTTP/1.1 200 Connection Established\r\n\r\n")
+	} else {
+		go func() {
+			req.Header.Set("Connection", req.Header.Get("Proxy-Connection"))
+			req.Header.Del("Proxy-Connection")
+			err := req.Write(conn)
+			if err != nil {
+				conn.Close()
+			}
+			if req.Body != nil {
+				req.Body.Close()
+			}
+		}()
+	}
 
 	Log.Infof("http proxying: %s", req.Host)
-	if err := tunneling(bs, conn); err != nil {
+	if err := tunneling(conn, bs); err != nil {
 		Log.Error(err)
 	}
 }

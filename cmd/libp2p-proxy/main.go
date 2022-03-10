@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -86,6 +87,10 @@ func main() {
 		cfg.PeerKey, _, _ = GeneratePeerKey()
 	}
 
+	if cfg.P2PHost == "" {
+		cfg.P2PHost = "p2p.to"
+	}
+
 	ctx := ContextWithSignal(context.Background())
 	privk, err := ReadPeerKey(cfg.PeerKey)
 	if err != nil {
@@ -94,7 +99,7 @@ func main() {
 
 	var opts []libp2p.Option = []libp2p.Option{
 		libp2p.Identity(privk),
-		libp2p.UserAgent(protocol.ID),
+		libp2p.UserAgent(protocol.ServiceName),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
 		libp2p.WithDialTimeout(time.Second * 60),
@@ -146,10 +151,16 @@ func main() {
 		}
 
 		ping.NewPingService(host)
-		proxy := protocol.NewProxyService(ctx, host, acl)
+		proxy := protocol.NewProxyService(ctx, host, acl, cfg.P2PHost)
 
-		if err := proxy.Wait(nil); err != nil {
-			protocol.Log.Fatal(err)
+		if cfg.ServePath != "" {
+			if err := proxy.ServeHTTP(static("./"), nil); err != nil {
+				protocol.Log.Fatal(err)
+			}
+		} else {
+			if err := proxy.Wait(nil); err != nil {
+				protocol.Log.Fatal(err)
+			}
 		}
 
 	} else {
@@ -179,7 +190,7 @@ func main() {
 		cancel()
 
 		fmt.Printf("Ping Server RTT: %s\n", res.RTT)
-		proxy := protocol.NewProxyService(ctx, host, nil)
+		proxy := protocol.NewProxyService(ctx, host, nil, cfg.P2PHost)
 		fmt.Printf("Proxy Address: %s\n", cfg.Proxy.Addr)
 		if err := proxy.Serve(cfg.Proxy.Addr, serverPeer.ID); err != nil {
 			protocol.Log.Fatal(err)
@@ -196,4 +207,10 @@ func ContextWithSignal(ctx context.Context) context.Context {
 		cancel()
 	}()
 	return newCtx
+}
+
+type static string
+
+func (s static) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, string(s))
 }
