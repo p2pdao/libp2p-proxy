@@ -3,6 +3,7 @@ package protocol
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -25,13 +26,12 @@ var Log = logging.Logger("libp2p-proxy")
 type ProxyService struct {
 	ctx     context.Context
 	host    host.Host
-	acl     *ACLFilter
 	http    *http.Server
 	p2pHost string
 }
 
-func NewProxyService(ctx context.Context, h host.Host, acl *ACLFilter, p2pHost string) *ProxyService {
-	ps := &ProxyService{ctx, h, acl, nil, p2pHost}
+func NewProxyService(ctx context.Context, h host.Host, p2pHost string) *ProxyService {
+	ps := &ProxyService{ctx, h, nil, p2pHost}
 	h.SetStreamHandler(ID, ps.Handler)
 	return ps
 }
@@ -61,25 +61,25 @@ func (p *ProxyService) Wait(fn func() error) error {
 }
 
 func (p *ProxyService) Handler(s network.Stream) {
-	// defer s.Close()
-
-	if p.acl != nil && !p.acl.Allow(s.Conn().RemotePeer(), s.Conn().RemoteMultiaddr()) {
-		Log.Infof("refusing proxy for %s; permission denied", s.Conn().RemotePeer())
-		s.Reset()
-		return
-	}
-
 	if err := s.Scope().SetService(ServiceName); err != nil {
 		Log.Errorf("error attaching stream to service: %s", err)
 		s.Reset()
 		return
 	}
 
-	bs := NewBufReaderStream(s)
+	p.handler(NewBufReaderStream(s))
+}
+
+func (p *ProxyService) handler(bs *BufReaderStream) {
+	defer bs.Close()
+
 	b, err := bs.Reader.Peek(1)
 	if err != nil {
+		if err == io.EOF {
+			return
+		}
 		Log.Errorf("read stream error: %s", err)
-		s.Reset()
+		bs.Reset()
 		return
 	}
 

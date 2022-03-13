@@ -10,10 +10,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ipfs/go-datastore"
+	leveldb "github.com/ipfs/go-ds-leveldb"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/routing"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/p2pdao/libp2p-proxy/config"
 	"github.com/p2pdao/libp2p-proxy/protocol"
@@ -121,15 +128,62 @@ func main() {
 		)
 	}
 
-	if cfg.Proxy == nil {
-		acl, err := protocol.NewACL(cfg.ACL)
+	if cfg.ACL != nil {
+		acl, err := protocol.NewACL(*cfg.ACL)
 		if err != nil {
 			protocol.Log.Fatal(err)
 		}
+		opts = append(opts, libp2p.ConnectionGater(acl))
+	}
+
+	if cfg.Proxy == nil || cfg.Proxy.ServerPeer == "" {
+		// add DHT for server side
+		var ds datastore.Batching
+		if cfg.DHT.DatastorePath != "" {
+			ds, err = leveldb.NewDatastore(cfg.DHT.DatastorePath, nil)
+			if err != nil {
+				protocol.Log.Fatal(err)
+			}
+		}
+		if ds != nil {
+			pds, err := pstoreds.NewPeerstore(ctx, ds, pstoreds.DefaultOpts())
+			if err != nil {
+				protocol.Log.Fatal(err)
+			}
+			opts = append(opts, libp2p.Peerstore(pds))
+		}
 
 		opts = append(opts,
+			libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+				dhtpeers := dht.GetDefaultBootstrapPeerAddrInfos()
+				if len(cfg.DHT.BootstrapPeers) > 0 {
+					for _, s := range cfg.DHT.BootstrapPeers {
+						if peer, err := peer.AddrInfoFromString(s); err == nil {
+							dhtpeers = append(dhtpeers, *peer)
+						}
+					}
+				}
+
+				dhtopts := []dht.Option{
+					dht.Mode(dht.ModeClient),
+					dht.BootstrapPeers(dhtpeers...),
+				}
+				if ds != nil {
+					dhtopts = append(dhtopts, dht.Datastore(ds))
+				}
+
+				idht, err := dht.New(ctx, h, dhtopts...)
+				if err == nil {
+					idht.Bootstrap(ctx)
+				}
+				return idht, err
+			}),
+		)
+	}
+
+	if cfg.Proxy == nil {
+		opts = append(opts,
 			libp2p.ListenAddrStrings(cfg.Network.ListenAddrs...),
-			libp2p.DefaultStaticRelays(),
 		)
 
 		if cfg.Network.EnableNAT {
@@ -137,6 +191,24 @@ func main() {
 				libp2p.NATPortMap(),
 				libp2p.EnableNATService(),
 			)
+		}
+
+		if len(cfg.Network.ExternalAddrs) > 0 {
+			emas := make([]ma.Multiaddr, 0, len(cfg.Network.ExternalAddrs))
+			for _, ad := range cfg.Network.ExternalAddrs {
+				if addr, err := ma.NewMultiaddr(ad); err == nil {
+					emas = append(emas, addr)
+				}
+			}
+
+			if len(emas) > 0 {
+				opts = append(opts,
+					libp2p.ForceReachabilityPublic(),
+					libp2p.AddrsFactory(func(_ []ma.Multiaddr) []ma.Multiaddr {
+						return emas
+					}),
+				)
+			}
 		}
 
 		host, err := libp2p.New(opts...)
@@ -151,10 +223,10 @@ func main() {
 		}
 
 		ping.NewPingService(host)
-		proxy := protocol.NewProxyService(ctx, host, acl, cfg.P2PHost)
+		proxy := protocol.NewProxyService(ctx, host, cfg.P2PHost)
 
 		if cfg.ServePath != "" {
-			if err := proxy.ServeHTTP(static("./"), nil); err != nil {
+			if err := proxy.ServeHTTP(static(cfg.ServePath), nil); err != nil {
 				protocol.Log.Fatal(err)
 			}
 		} else {
@@ -173,24 +245,27 @@ func main() {
 		}
 
 		fmt.Printf("Peer ID: %s\n", host.ID())
-		serverPeer, err := peer.AddrInfoFromString(cfg.Proxy.ServerPeer)
-		if err != nil {
-			protocol.Log.Fatal(err)
+		serverPeer := &peer.AddrInfo{ID: host.ID()}
+		if cfg.Proxy.ServerPeer != "" {
+			serverPeer, err = peer.AddrInfoFromString(cfg.Proxy.ServerPeer)
+			if err != nil {
+				protocol.Log.Fatal(err)
+			}
+
+			ctxt, cancel := context.WithTimeout(ctx, time.Second*10)
+			if err = host.Connect(ctxt, *serverPeer); err != nil {
+				protocol.Log.Fatal(err)
+			}
+
+			res := <-ping.Ping(ctx, host, serverPeer.ID)
+			if res.Error != nil {
+				protocol.Log.Fatal(res.Error)
+			}
+			cancel()
+			fmt.Printf("Ping Server RTT: %s\n", res.RTT)
 		}
 
-		ctxt, cancel := context.WithTimeout(ctx, time.Second*10)
-		if err = host.Connect(ctxt, *serverPeer); err != nil {
-			protocol.Log.Fatal(err)
-		}
-
-		res := <-ping.Ping(ctx, host, serverPeer.ID)
-		if res.Error != nil {
-			protocol.Log.Fatal(res.Error)
-		}
-		cancel()
-
-		fmt.Printf("Ping Server RTT: %s\n", res.RTT)
-		proxy := protocol.NewProxyService(ctx, host, nil, cfg.P2PHost)
+		proxy := protocol.NewProxyService(ctx, host, cfg.P2PHost)
 		fmt.Printf("Proxy Address: %s\n", cfg.Proxy.Addr)
 		if err := proxy.Serve(cfg.Proxy.Addr, serverPeer.ID); err != nil {
 			protocol.Log.Fatal(err)

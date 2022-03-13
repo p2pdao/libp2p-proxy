@@ -30,6 +30,12 @@ func (p *ProxyService) Serve(proxyAddr string, remotePeer peer.ID) error {
 func (p *ProxyService) sideHandler(conn net.Conn, remotePeer peer.ID) {
 	defer conn.Close()
 
+	// standalone mode
+	if remotePeer == p.host.ID() {
+		p.handler(NewBufReaderStream(conn))
+		return
+	}
+
 	s, err := p.host.NewStream(p.ctx, remotePeer, ID)
 	if err != nil {
 		Log.Error(err)

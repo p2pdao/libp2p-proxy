@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
@@ -14,61 +15,68 @@ import (
 
 func (p *ProxyService) p2phttpHandler(bs *BufReaderStream, req *http.Request) {
 	var err error
-	if req == nil {
-		req, err = http.ReadRequest(bs.Reader)
-	}
-
-	if err != nil {
-		Log.Error(err)
-		writeHTTPError(bs, 400, err)
-		bs.Reset()
-		return
-	}
-
-	pp, err := parsePath(req.URL.Path)
-	if err != nil {
-		err = fmt.Errorf("failed to parse request: %v", err)
-		Log.Error(err)
-		writeHTTPError(bs, 400, err)
-		bs.Reset()
-		return
-	}
-
-	req.Host = pp.target.ID.String() // Let URL's Host take precedence.
-	req.URL.Path = pp.httpPath
-	req.Close = true // TODO, conn reuse case
-
-	p.host.Peerstore().AddAddrs(pp.target.ID, pp.target.Addrs, peerstore.TempAddrTTL)
-	s, err := p.host.NewStream(req.Context(), pp.target.ID, pp.protocol)
-	if err != nil {
-		if req.Body != nil {
-			req.Body.Close()
+	for {
+		bs.SetReadDeadline(time.Now().Add(time.Second * 10))
+		if req == nil {
+			req, err = http.ReadRequest(bs.Reader)
 		}
-		err = fmt.Errorf("dial remote error: %v", err)
-		Log.Error(err)
-		writeHTTPError(bs, 500, err)
-		bs.Reset()
-		return
-	}
 
-	Log.Infof("p2p proxying: %s", pp.target.ID.String())
-	// Write the request while reading the response
-	go func() {
-		err := req.Write(s)
 		if err != nil {
-			s.Close()
-		}
-		if req.Body != nil {
-			req.Body.Close()
-		}
-	}()
+			if err == io.EOF {
+				return
+			}
 
-	_, err = io.Copy(bs, s)
-	if err != nil {
-		err = fmt.Errorf("request remote error: %v", err)
-		Log.Error(err)
-		writeHTTPError(bs, 500, err)
-		bs.Reset()
+			Log.Error(err)
+			writeHTTPError(bs, 400, err)
+			bs.Reset()
+			return
+		}
+
+		pp, err := parsePath(req.URL.Path)
+		if err != nil {
+			err = fmt.Errorf("failed to parse request: %v", err)
+			Log.Error(err)
+			writeHTTPError(bs, 400, err)
+			bs.Reset()
+			return
+		}
+
+		req.Host = pp.target.ID.String() // Let URL's Host take precedence.
+		req.URL.Path = pp.httpPath
+		req.Close = true
+		if len(pp.target.Addrs) > 0 {
+			p.host.Peerstore().AddAddrs(pp.target.ID, pp.target.Addrs, peerstore.TempAddrTTL)
+		}
+		s, err := p.host.NewStream(req.Context(), pp.target.ID, pp.protocol)
+		if err != nil {
+			if req.Body != nil {
+				req.Body.Close()
+			}
+			err = fmt.Errorf("dial remote error: %v", err)
+			Log.Error(err)
+			writeHTTPError(bs, 500, err)
+			bs.Reset()
+			return
+		}
+
+		Log.Infof("p2p proxying: %s", pp.target.ID.String())
+		// Write the request while reading the response
+		go func() {
+			err := req.Write(s)
+			if err != nil {
+				s.Close()
+			}
+			if req.Body != nil {
+				req.Body.Close()
+			}
+		}()
+
+		_, err = io.Copy(bs, s)
+		s.Close()
+		req = nil
+		if err != nil {
+			Log.Warn(err)
+		}
 	}
 }
 

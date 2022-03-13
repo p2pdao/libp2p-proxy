@@ -2,40 +2,37 @@ package protocol
 
 import (
 	"bufio"
+	"io"
 	"time"
-
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
-var _ network.Stream = (*BufReaderStream)(nil)
+var _ Stream = (*BufReaderStream)(nil)
+
+type Stream interface {
+	Read(b []byte) (n int, err error)
+	Write(b []byte) (n int, err error)
+	Close() error
+
+	SetDeadline(t time.Time) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+}
+
+type closeWriter interface {
+	CloseWrite() error
+}
+
+type closeReader interface {
+	CloseRead() error
+}
+
+type reseter interface {
+	Reset() error
+}
 
 type BufReaderStream struct {
-	s      network.Stream
+	s      Stream
 	Reader *bufio.Reader
-}
-
-func (bs *BufReaderStream) ID() string {
-	return bs.s.ID()
-}
-
-func (bs *BufReaderStream) Protocol() protocol.ID {
-	return bs.s.Protocol()
-}
-func (bs *BufReaderStream) SetProtocol(id protocol.ID) error {
-	return bs.s.SetProtocol(id)
-}
-
-func (bs *BufReaderStream) Stat() network.Stats {
-	return bs.s.Stat()
-}
-
-func (bs *BufReaderStream) Conn() network.Conn {
-	return bs.s.Conn()
-}
-
-func (bs *BufReaderStream) Scope() network.StreamScope {
-	return bs.s.Scope()
 }
 
 func (bs *BufReaderStream) Read(p []byte) (int, error) {
@@ -51,14 +48,24 @@ func (bs *BufReaderStream) Close() error {
 }
 
 func (bs *BufReaderStream) Reset() error {
-	return bs.s.Reset()
+	if s, ok := bs.s.(reseter); ok {
+		return s.Reset()
+	}
+	return bs.s.Close()
 }
+
 func (bs *BufReaderStream) CloseWrite() error {
-	return bs.s.CloseWrite()
+	if s, ok := bs.s.(closeWriter); ok {
+		return s.CloseWrite()
+	}
+	return bs.s.Close()
 }
 
 func (bs *BufReaderStream) CloseRead() error {
-	return bs.s.CloseRead()
+	if s, ok := bs.s.(closeReader); ok {
+		return s.CloseRead()
+	}
+	return bs.s.Close()
 }
 
 func (bs *BufReaderStream) SetDeadline(t time.Time) error {
@@ -71,9 +78,32 @@ func (bs *BufReaderStream) SetWriteDeadline(t time.Time) error {
 	return bs.s.SetWriteDeadline(t)
 }
 
-func NewBufReaderStream(s network.Stream) *BufReaderStream {
+func NewBufReaderStream(s Stream) *BufReaderStream {
 	return &BufReaderStream{
 		s:      s,
 		Reader: bufio.NewReader(s),
 	}
+}
+
+func tunneling(dst, src Stream) error {
+	errCh := make(chan error, 2)
+	go proxy(dst, src, errCh)
+	go proxy(src, dst, errCh)
+	// Wait
+	for i := 0; i < 2; i++ {
+		err := <-errCh
+		if err != nil {
+			// return from this function closes target (and conn).
+			return err
+		}
+	}
+	return nil
+}
+
+func proxy(dst io.Writer, src io.Reader, errCh chan error) {
+	_, err := io.Copy(dst, src)
+	if tcpConn, ok := dst.(closeWriter); ok {
+		tcpConn.CloseWrite()
+	}
+	errCh <- err
 }

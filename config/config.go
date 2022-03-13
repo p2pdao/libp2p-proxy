@@ -10,7 +10,8 @@ type Config struct {
 	P2PHost   string        `json:"p2p_host"`
 	ServePath string        `json:"serve_path"`
 	Network   NetworkConfig `json:"network"`
-	ACL       ACLConfig     `json:"acl"`
+	DHT       DHTConfig     `json:"dht"`
+	ACL       *ACLConfig    `json:"acl"`
 	Proxy     *ProxyConfig  `json:"proxy"`
 }
 
@@ -20,14 +21,20 @@ type ProxyConfig struct {
 }
 
 type NetworkConfig struct {
-	EnableNAT   bool     `json:"enable_nat"`
-	ListenAddrs []string `json:"listen_addrs"`
-	Relays      []string `json:"relays"`
+	EnableNAT     bool     `json:"enable_nat"`
+	ListenAddrs   []string `json:"listen_addrs"`
+	ExternalAddrs []string `json:"external_addrs" yaml:"external_addrs"`
+	Relays        []string `json:"relays"`
 }
 
 type ACLConfig struct {
 	AllowPeers   []string `json:"allow_peers"`
 	AllowSubnets []string `json:"allow_subnets"`
+}
+
+type DHTConfig struct {
+	DatastorePath  string   `json:"datastore_path"`
+	BootstrapPeers []string `json:"bootstrap_peers"`
 }
 
 func Default() Config {
@@ -38,7 +45,7 @@ func Default() Config {
 				"/ip6/::1/tcp/4001",
 			},
 		},
-		ACL: ACLConfig{
+		ACL: &ACLConfig{
 			AllowPeers:   []string{},
 			AllowSubnets: []string{"127.0.0.1/32", "::1/128"},
 		},
