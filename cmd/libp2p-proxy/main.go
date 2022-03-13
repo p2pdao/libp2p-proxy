@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/routing"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-peerstore/pstoreds"
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -113,7 +113,6 @@ func main() {
 	}
 
 	if len(cfg.Network.Relays) > 0 {
-		cfg.Network.Relays = autorelay.DefaultRelays
 		relays := make([]peer.AddrInfo, 0, len(cfg.Network.Relays))
 		for _, addr := range cfg.Network.Relays {
 			pi, err := peer.AddrInfoFromString(addr)
@@ -128,16 +127,14 @@ func main() {
 		)
 	}
 
-	if cfg.ACL != nil {
-		acl, err := protocol.NewACL(*cfg.ACL)
-		if err != nil {
-			protocol.Log.Fatal(err)
-		}
-		opts = append(opts, libp2p.ConnectionGater(acl))
+	acl, err := protocol.NewACL(cfg.ACL)
+	if err != nil {
+		protocol.Log.Fatal(err)
 	}
+	opts = append(opts, libp2p.ConnectionGater(acl))
 
 	if cfg.Proxy == nil || cfg.Proxy.ServerPeer == "" {
-		// add DHT for server side
+		// run DHT client for server side
 		var ds datastore.Batching
 		if cfg.DHT.DatastorePath != "" {
 			ds, err = leveldb.NewDatastore(cfg.DHT.DatastorePath, nil)
@@ -226,7 +223,9 @@ func main() {
 		proxy := protocol.NewProxyService(ctx, host, cfg.P2PHost)
 
 		if cfg.ServePath != "" {
-			if err := proxy.ServeHTTP(static(cfg.ServePath), nil); err != nil {
+			ss := newStatic(cfg.ServePath)
+			fmt.Printf("Serve HTTP static: %s\n", ss)
+			if err := proxy.ServeHTTP(ss, nil); err != nil {
 				protocol.Log.Fatal(err)
 			}
 		} else {
@@ -286,6 +285,24 @@ func ContextWithSignal(ctx context.Context) context.Context {
 
 type static string
 
+func newStatic(root string) static {
+	root = filepath.FromSlash(root)
+	if root[0] == '.' {
+		wd, err := os.Getwd()
+		if err != nil {
+			protocol.Log.Fatal(err)
+		}
+		root = filepath.Join(wd, root)
+	}
+	info, _ := os.Stat(root)
+	if info == nil || !info.IsDir() {
+		protocol.Log.Fatalf("invalid root path: %s", root)
+	}
+	return static(root)
+}
+
 func (s static) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, string(s))
+	name := filepath.Join(string(s), filepath.FromSlash(r.URL.Path))
+	defer protocol.Log.Infof("serve file: %s", name)
+	http.ServeFile(w, r, name)
 }

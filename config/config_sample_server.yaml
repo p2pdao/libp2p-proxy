@@ -1,0 +1,12 @@
+peer_key: "CAESQLcvtmSITUktckPrPSOQuTSPjTBBO7/FW3m5N1qnTfBv9ilHJ7GknXc/AKLaiekjqlm/STh97MDPTV8nkl4aRfM="
+network:
+  listen_addrs:
+    - "/ip4/0.0.0.0/udp/11211/quic"
+    - "/ip6/::/udp/11211/quic"
+    - "/ip4/0.0.0.0/tcp/11211"
+    - "/ip6/::/tcp/11211"
+    - "/ip4/0.0.0.0/tcp/11212/ws"
+    - "/ip6/::/tcp/11212/ws"
+acl:
+  allow_peers: ["12D3KooWAMspLEqdE79kAuvMAmPNHeJdJGTpKb7rEmksrQodhU62"]
+  allow_subnets: []
