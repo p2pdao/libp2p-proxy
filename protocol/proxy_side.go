@@ -44,7 +44,7 @@ func (p *ProxyService) sideHandler(conn net.Conn, remotePeer peer.ID) {
 
 	defer s.Close()
 
-	if err := tunneling(s, conn); err != nil {
-		Log.Error(err)
+	if err := tunneling(s, conn); err != nil && !isNetworkError(err) {
+		Log.Warn(err)
 	}
 }

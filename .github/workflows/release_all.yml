@@ -1,0 +1,33 @@
+name: build-release
+on:
+  push:
+    tags:
+    - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '1.17.8'
+      - name: Build
+        run: |
+          make build-all
+          zip -j libp2p-proxy.linux-amd64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.linux-amd64 ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+          zip -j libp2p-proxy.linux-arm64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.linux-arm64 ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+          zip -j libp2p-proxy.darwin-amd64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.darwin-amd64 ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+          zip -j libp2p-proxy.darwin-arm64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.darwin-arm64 ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+          zip -j libp2p-proxy.windows-amd64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.windows-amd64.exe ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+          zip -j libp2p-proxy.windows-arm64-${{ github.ref_name }}.zip ./dist/libp2p-proxy.windows-arm64.exe ./config/config_sample_client.yaml ./config/config_sample_server.yaml
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            libp2p-proxy.linux-amd64-${{ github.ref_name }}.zip
+            libp2p-proxy.linux-arm64-${{ github.ref_name }}.zip
+            libp2p-proxy.darwin-amd64-${{ github.ref_name }}.zip
+            libp2p-proxy.darwin-arm64-${{ github.ref_name }}.zip
+            libp2p-proxy.windows-amd64-${{ github.ref_name }}.zip
+            libp2p-proxy.windows-arm64-${{ github.ref_name }}.zip

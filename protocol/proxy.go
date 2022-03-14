@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -118,4 +119,8 @@ func (p *ProxyService) ServeHTTP(handler http.Handler, s *http.Server) error {
 
 func (p *ProxyService) isP2PHttp(host string) bool {
 	return strings.HasPrefix(host, p.p2pHost)
+}
+
+func isNetworkError(err error) bool {
+	return err == io.EOF || err == io.ErrUnexpectedEOF || err == syscall.ECONNRESET
 }

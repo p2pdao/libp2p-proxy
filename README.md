@@ -5,17 +5,30 @@ libp2p-proxy creates a http and socks5 proxy service using libp2p peers.
 
 libp2p-proxy can be used to access http service running on libp2p peers.
 
+Client & Server Mode:
 ```
-                                                                                       XX XXX
-                                                                                    XXX     XXXX
-                                                                                 XXXX           XXX
-                    +----------+               +----------+                  XXXXX                 XX
-                    |          |               |          | HTTP or HTTPS   X                    XX
-         TCP stream |  Proxy   | libp2p stream |  Proxy   <---------------> X  <THE INTERNET>  XX
-Browser <----------->  Client  <--------------->  Server  |                XX   HTTP SERVER      XX
-    http tunnel ->  |          |               |          <---------------> X                      XX
-  socks5 tunnel ->  |          |               |          | libp2p stream    XXX XXXX XXX        XX
-                    +----------+               +----------+                               XXXX XXX
+                                                                               XXX XXX XX
+                                                                           XXXX         XXX
+                 +--------+               +--------+                  XXXXX                XX
+                 |        |               |        | HTTP or HTTPS   X                    XX
+      TCP stream | Proxy  | libp2p stream | Proxy  <---------------> X  <THE INTERNET>   XX
+App  <-----------> Client <---------------> Server |                XX   HTTP SERVER      XX
+  http tunnel -> |        |               |        <---------------> X                     XX
+socks5 tunnel -> | Local  |               | Remote | libp2p stream    XXX XXXX XXX        XX
+                 +--------+               +--------+                               XXXX XXX
+```
+
+Standalone Mode:
+```
+                                                       XXX XXX XX
+                                                   XXXX         XXX
+                 +----------+                  XXXXX                XX
+                 |  Proxy   | HTTP or HTTPS   X                    XX
+      TCP stream |  Client  <---------------> X  <THE INTERNET>   XX
+App  <----------->  Server  |                XX   HTTP SERVER      XX
+  http tunnel -> |          <---------------> X                     XX
+socks5 tunnel -> |  Local   | libp2p stream    XXX XXXX XXX        XX
+                 +----------+                              XXXX XXX
 ```
 
 ## Install
