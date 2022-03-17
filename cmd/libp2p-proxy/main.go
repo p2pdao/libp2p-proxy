@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -251,17 +252,19 @@ func main() {
 				protocol.Log.Fatal(err)
 			}
 
-			ctxt, cancel := context.WithTimeout(ctx, time.Second*10)
+			// host.Peerstore().AddAddrs(serverPeer.ID, serverPeer.Addrs, peerstore.PermanentAddrTTL)
+			ctxt, cancel := context.WithTimeout(ctx, time.Second*5)
 			if err = host.Connect(ctxt, *serverPeer); err != nil {
 				protocol.Log.Fatal(err)
 			}
-
-			res := <-ping.Ping(ctx, host, serverPeer.ID)
+			res := <-ping.Ping(ctxt, host, serverPeer.ID)
 			if res.Error != nil {
-				protocol.Log.Fatal(res.Error)
+				protocol.Log.Fatalf("ping error: %v", res.Error)
+			} else {
+				protocol.Log.Infof("ping RTT: %s", res.RTT)
 			}
 			cancel()
-			fmt.Printf("Ping Server RTT: %s\n", res.RTT)
+			host.ConnManager().Protect(serverPeer.ID, "proxy")
 		}
 
 		proxy := protocol.NewProxyService(ctx, host, cfg.P2PHost)
@@ -302,7 +305,14 @@ func newStatic(root string) static {
 }
 
 func (s static) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	name := filepath.Join(string(s), filepath.FromSlash(r.URL.Path))
+	path := filepath.FromSlash(r.URL.Path)
+	name := filepath.Join(string(s), path)
+	if !strings.HasPrefix(name, string(s)) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "invalid request path: %s", path)
+		return
+	}
 	defer protocol.Log.Infof("serve file: %s", name)
 	http.ServeFile(w, r, name)
 }

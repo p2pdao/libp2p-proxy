@@ -67,7 +67,7 @@ func (p *ProxyService) httpHandler(bs *BufReaderStream) {
 	}
 
 	Log.Infof("http proxying: %s", req.Host)
-	if err := tunneling(conn, bs); err != nil && !isNetworkError(err) {
+	if err := tunneling(conn, bs); shouldLogError(err) {
 		Log.Warn(err)
 	}
 }

@@ -74,7 +74,7 @@ func (p *ProxyService) p2phttpHandler(bs *BufReaderStream, req *http.Request) {
 		_, err = io.Copy(bs, s)
 		s.Close()
 		req = nil
-		if err != nil && !isNetworkError(err) {
+		if shouldLogError(err) {
 			Log.Warn(err)
 		}
 	}

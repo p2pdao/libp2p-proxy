@@ -38,13 +38,12 @@ func (p *ProxyService) sideHandler(conn net.Conn, remotePeer peer.ID) {
 
 	s, err := p.host.NewStream(p.ctx, remotePeer, ID)
 	if err != nil {
-		Log.Error(err)
+		Log.Errorf("creating stream to %s error: %v", remotePeer, err)
 		return
 	}
 
 	defer s.Close()
-
-	if err := tunneling(s, conn); err != nil && !isNetworkError(err) {
+	if err := tunneling(s, conn); shouldLogError(err) {
 		Log.Warn(err)
 	}
 }

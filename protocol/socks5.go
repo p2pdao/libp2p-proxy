@@ -12,13 +12,13 @@ func IsSocks5(v byte) bool {
 }
 
 func (p *ProxyService) socks5Handler(bs *BufReaderStream) {
-	if err := socks5Negotiate(bs); err != nil && err != io.EOF {
+	if err := socks5Negotiate(bs); shouldLogError(err) {
 		Log.Error(err)
 		return
 	}
 
-	if err := p.socks5RequestConnect(bs); err != nil && err != io.EOF {
-		Log.Error(err)
+	if err := p.socks5RequestConnect(bs); shouldLogError(err) {
+		Log.Warn(err)
 	}
 }
 
@@ -75,9 +75,6 @@ func (p *ProxyService) socks5RequestConnect(bs *BufReaderStream) error {
 	}
 
 	Log.Infof("socks5 proxying: %s", r.Address())
-	if err := tunneling(bs, conn); err != nil && !isNetworkError(err) {
-		Log.Warn(err)
-	}
 	return tunneling(conn, bs)
 }
 

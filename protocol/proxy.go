@@ -121,6 +121,10 @@ func (p *ProxyService) isP2PHttp(host string) bool {
 	return strings.HasPrefix(host, p.p2pHost)
 }
 
-func isNetworkError(err error) bool {
-	return err == io.EOF || err == io.ErrUnexpectedEOF || err == syscall.ECONNRESET
+func shouldLogError(err error) bool {
+	return err != nil && err != io.EOF &&
+		err != io.ErrUnexpectedEOF && err != syscall.ECONNRESET &&
+		!strings.Contains(err.Error(), "timeout") &&
+		!strings.Contains(err.Error(), "reset") &&
+		!strings.Contains(err.Error(), "closed")
 }
