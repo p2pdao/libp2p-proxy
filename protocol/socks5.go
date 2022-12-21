@@ -74,7 +74,6 @@ func (p *ProxyService) socks5RequestConnect(bs *BufReaderStream) error {
 		return err
 	}
 
-	Log.Infof("socks5 proxying: %s", r.Address())
 	return tunneling(conn, bs)
 }
 

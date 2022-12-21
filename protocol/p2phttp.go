@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 func (p *ProxyService) p2phttpHandler(bs *BufReaderStream, req *http.Request) {
@@ -59,7 +59,6 @@ func (p *ProxyService) p2phttpHandler(bs *BufReaderStream, req *http.Request) {
 			return
 		}
 
-		Log.Infof("p2p proxying: %s", pp.target.ID.String())
 		// Write the request while reading the response
 		go func() {
 			err := req.Write(s)

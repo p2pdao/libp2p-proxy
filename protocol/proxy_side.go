@@ -3,7 +3,7 @@ package protocol
 import (
 	"net"
 
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func (p *ProxyService) Serve(proxyAddr string, remotePeer peer.ID) error {
